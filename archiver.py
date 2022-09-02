@@ -37,8 +37,8 @@ def prune_list(lst, latest):
 
 def insert(con, table_name, count, uniques, timestamp):
     cursor = con.cursor()
-    insertQuery = f"""INSERT INTO "{table_name}"
-        VALUES (?, ?, ?);"""
+    insertQuery = f"""insert into "{table_name}"
+        values (?, ?, ?);"""
 
     cursor.execute(insertQuery, (count, uniques, timestamp))
     cursor.close()
@@ -50,8 +50,8 @@ def insert_metric(con, table_name, dct):
     uniques = dct['uniques']
     timestamp = dct['timestamp']
 
-    insert_query = f"""INSERT INTO "{table_name}"
-        VALUES (?, ?, ?);"""
+    insert_query = f"""insert into "{table_name}"
+        values (?, ?, ?);"""
 
     cursor = con.cursor()
     cursor.execute(insert_query, (count, uniques, timestamp))
@@ -59,8 +59,9 @@ def insert_metric(con, table_name, dct):
 
     
 def insert_metrics(con, table_name, lst):
-    insert_query = f"""INSERT INTO "{table_name}"
-        VALUES (?, ?, ?);"""
+    print(f'inserting metrics into {table_name}')
+    insert_query = f"""insert into "{table_name}"
+        values (?, ?, ?);"""
 
     cursor = con.cursor()
     cursor.execute('begin')
@@ -85,8 +86,9 @@ def create_metric_table(con, repo, metric):
     repo_name = repo['name']
     #table_name = f'{owner}/{repo_name}/{metric}'
     table_name = get_table_name(repo, metric)
+    print(f'creating table {table_name}')
 
-    createTable = f'''CREATE TABLE IF NOT EXISTS "{table_name}" (
+    createTable = f'''create table if not exists "{table_name}" (
         count integer,
         uniques integer,
         timestamp text);'''
@@ -152,6 +154,7 @@ def get_clones(repo):
 def get_metrics(repo, metric):
     url = get_url(repo, metric)
     headers = get_headers(repo)
+    print(f'getting metrics from {url}')
     r = requests.get(url, headers=headers)
     if r.status_code == 200:
         return json.loads(r.content)[metric]
@@ -172,20 +175,26 @@ def main():
         for metric in METRICS.keys():
             table = get_table_name(repo, metric)
             create_metric_table(con, repo, metric)
+            '''
             insert_metric(con, table, {'timestamp': '2022-08-19T00:00:00Z', 'count': 105, 'uniques': 19})
             insert_metric(con, table, {'timestamp': '2022-08-20T00:00:00Z', 'count': 105, 'uniques': 19})
             insert_metric(con, table, {'timestamp': '2022-08-21T00:00:00Z', 'count': 105, 'uniques': 19})
             insert_metric(con, table, {'timestamp': '2022-08-22T00:00:00Z', 'count': 105, 'uniques': 19})
+            '''
 
             lst = get_metrics(repo, metric)
             latest = get_latest(con, table)
             pruned_list = prune_list(lst, latest)
             insert_metrics(con, table, pruned_list)
 
+            
+            '''
             print('****************************** list ****************************')
             print(lst)
             print('****************************************************************')
+            '''
 
+            '''
             print('****************************** latest ****************************')
             print(latest)
             print('****************************************************************')
@@ -193,22 +202,10 @@ def main():
             print('****************************** new list ****************************')
             print(pruned_list)
             print('****************************************************************')
-            return 
+            '''
 
     con.close() 
         
-    #create_table('ufs-community', 'ufs-weather-model', 'views')
-
-    '''
-    for repo in REPOS:
-        for metric in METRICS.keys():
-            # create the table if it does not already exist
-            create_metric_table(con, repo, metric)
-            m = get_metrics(repo, metric)
-            print(m)
-    '''
-
-
 
 if __name__ == '__main__':
     main()
