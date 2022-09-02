@@ -3,9 +3,10 @@ import json
 from datetime import datetime
 from tk import *
 import sqlite3
+import os
 
 
-DB = 'metrics.db'
+DB_PATH = os.path.join(os.path.dirname(__file__), 'metrics.db')
 
 REPOS = [
         {'owner': 'ufs-community', 'name': 'ufs-weather-model', 'token': TOKEN },
@@ -169,7 +170,8 @@ def main():
     #ts = '2022-08-11T00:00:00Z'
     '''
 
-    con = sqlite3.connect(DB, isolation_level=None)
+    
+    con = sqlite3.connect(DB_PATH, isolation_level=None)
 
     for repo in REPOS:
         for metric in METRICS.keys():
