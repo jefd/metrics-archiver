@@ -38,10 +38,9 @@ def prune_list(lst, latest):
 
 def insert(con, table_name, count, uniques, timestamp):
     cursor = con.cursor()
-    insertQuery = f"""insert into "{table_name}"
-        values (?, ?, ?);"""
+    insert_query = f"""insert into "{table_name}" values (?, ?, ?);"""
 
-    cursor.execute(insertQuery, (count, uniques, timestamp))
+    cursor.execute(insert_query, (count, uniques, timestamp))
     cursor.close()
 
 
@@ -106,8 +105,7 @@ def create_repo_table(con):
         owner text,
         name text,
         title text,
-        minDate text,
-        maxDate text);'''
+        minDate text);'''
     cursor = con.cursor()
     cursor.execute(create_table)
     cursor.close()
@@ -173,6 +171,31 @@ def get_metrics(repo, metric):
     if r.status_code == 200:
         return json.loads(r.content)[metric]
 
+def update_repo_table(con, repo, minDate):
+    if row_exists(con, repo):
+        return
+    
+    cursor = con.cursor()
+    owner = repo['owner']
+    name = repo['name']
+    title = repo['title']
+
+    insert_query = f"""insert into repos values (?, ?, ?, ?);"""
+    cursor.execute(insert_query, (owner, name, title, minDate))
+    cursor.close()
+
+def row_exists(con, repo):
+    cursor = con.cursor()
+    owner = repo['owner']
+    name = repo['name']
+    sql = f'''select minDate from repos where owner="{owner}" and name="{name}";'''
+    cursor.execute(sql)
+    result = cursor.fetchone()
+    cursor.close()
+    return result
+
+
+
 def main():
     con = sqlite3.connect(DB_PATH, isolation_level=None)
 
@@ -191,15 +214,17 @@ def main():
 
             latest = get_latest(con, table_name)
             pruned_list = prune_list(lst, latest)
+            if not pruned_list: continue
             insert_metrics(con, table_name, pruned_list)
 
-            # After inserting the metrics data, we want to insert/update the repos
-            # table with minDate and maxDate. If the row corresponding to this owner/name
-            # exists, then minDate should already exist so just update maxDate. If not,
-            # then insert new row with minDate and maxDate.
+            # After inserting the metrics data, we want to insert the minDate into the repos
+            # table if it doesn't already exist. 
+
+            minDate = pruned_list[0]['timestamp']
+            update_repo_table(con, repo, minDate)
 
     con.close() 
-        
+
 
 if __name__ == '__main__':
     main()
