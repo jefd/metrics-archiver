@@ -185,6 +185,12 @@ def main():
             '''
 
             lst = get_metrics(repo, metric)
+            if not lst: continue
+           
+            # remove last element because that is being continually
+            # updated and we don't want to store it prematurely.
+            lst = lst[:-1] 
+
             latest = get_latest(con, table)
             pruned_list = prune_list(lst, latest)
             insert_metrics(con, table, pruned_list)
