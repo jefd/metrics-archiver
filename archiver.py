@@ -105,6 +105,7 @@ def create_repo_table(con):
         owner text,
         name text,
         title text,
+        metric text,
         minDate text);'''
     cursor = con.cursor()
     cursor.execute(create_table)
@@ -171,8 +172,8 @@ def get_metrics(repo, metric):
     if r.status_code == 200:
         return json.loads(r.content)[metric]
 
-def update_repo_table(con, repo, minDate):
-    if row_exists(con, repo):
+def update_repo_table(con, repo, metric, minDate):
+    if row_exists(con, repo, metric):
         return
     
     cursor = con.cursor()
@@ -180,15 +181,15 @@ def update_repo_table(con, repo, minDate):
     name = repo['name']
     title = repo['title']
 
-    insert_query = f"""insert into repos values (?, ?, ?, ?);"""
-    cursor.execute(insert_query, (owner, name, title, minDate))
+    insert_query = f"""insert into repos values (?, ?, ?, ?, ?);"""
+    cursor.execute(insert_query, (owner, name, title, metric, minDate))
     cursor.close()
 
-def row_exists(con, repo):
+def row_exists(con, repo, metric):
     cursor = con.cursor()
     owner = repo['owner']
     name = repo['name']
-    sql = f'''select minDate from repos where owner="{owner}" and name="{name}";'''
+    sql = f'''select minDate from repos where owner="{owner}" and name="{name}" and metric="{metric}";'''
     cursor.execute(sql)
     result = cursor.fetchone()
     cursor.close()
@@ -198,12 +199,12 @@ def row_exists(con, repo):
 
 def main():
     con = sqlite3.connect(DB_PATH, isolation_level=None)
+    create_repo_table(con)
 
     for repo in REPOS:
         for metric in METRICS.keys():
             table_name = get_table_name(repo, metric)
             create_metric_table(con, repo, metric)
-            create_repo_table(con)
 
             lst = get_metrics(repo, metric)
             if not lst: continue
@@ -221,7 +222,7 @@ def main():
             # table if it doesn't already exist. 
 
             minDate = pruned_list[0]['timestamp']
-            update_repo_table(con, repo, minDate)
+            update_repo_table(con, repo, metric, minDate)
 
     con.close() 
 
