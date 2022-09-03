@@ -105,7 +105,6 @@ def create_repo_table(con):
         owner text,
         name text,
         title text,
-        metric text,
         minDate text);'''
     cursor = con.cursor()
     cursor.execute(create_table)
@@ -172,8 +171,8 @@ def get_metrics(repo, metric):
     if r.status_code == 200:
         return json.loads(r.content)[metric]
 
-def update_repo_table(con, repo, metric, minDate):
-    if row_exists(con, repo, metric):
+def update_repo_table(con, repo, minDate):
+    if row_exists(con, repo):
         return
     
     cursor = con.cursor()
@@ -181,15 +180,15 @@ def update_repo_table(con, repo, metric, minDate):
     name = repo['name']
     title = repo['title']
 
-    insert_query = f"""insert into repos values (?, ?, ?, ?, ?);"""
-    cursor.execute(insert_query, (owner, name, title, metric, minDate))
+    insert_query = f"""insert into repos values (?, ?, ?, ?);"""
+    cursor.execute(insert_query, (owner, name, title, minDate))
     cursor.close()
 
-def row_exists(con, repo, metric):
+def row_exists(con, repo):
     cursor = con.cursor()
     owner = repo['owner']
     name = repo['name']
-    sql = f'''select minDate from repos where owner="{owner}" and name="{name}" and metric="{metric}";'''
+    sql = f'''select minDate from repos where owner="{owner}" and name="{name}";'''
     cursor.execute(sql)
     result = cursor.fetchone()
     cursor.close()
@@ -222,7 +221,7 @@ def main():
             # table if it doesn't already exist. 
 
             minDate = pruned_list[0]['timestamp']
-            update_repo_table(con, repo, metric, minDate)
+            update_repo_table(con, repo, minDate)
 
     con.close() 
 
