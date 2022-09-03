@@ -9,8 +9,8 @@ import os
 DB_PATH = os.path.join(os.path.dirname(__file__), 'metrics.db')
 
 REPOS = [
-        {'owner': 'ufs-community', 'name': 'ufs-weather-model', 'token': TOKEN },
-        {'owner': 'ufs-community', 'name': 'ufs-srweather-app', 'token': TOKEN },
+        {'owner': 'ufs-community', 'name': 'ufs-weather-model', 'title': 'Weather Model', 'token': TOKEN },
+        {'owner': 'ufs-community', 'name': 'ufs-srweather-app', 'title': 'Short Range Weather App', 'token': TOKEN },
 ]
 
 # map of metric name to github api path
@@ -89,16 +89,29 @@ def create_metric_table(con, repo, metric):
     table_name = get_table_name(repo, metric)
     print(f'creating table {table_name}')
 
-    createTable = f'''create table if not exists "{table_name}" (
+    create_table = f'''create table if not exists "{table_name}" (
         count integer,
         uniques integer,
         timestamp text);'''
 
     #con = sqlite3.connect(DB)
     cursor = con.cursor()
-    cursor.execute(createTable)
+    cursor.execute(create_table)
     cursor.close()
     #con.commit()
+
+
+def create_repo_table(con):
+    create_table = f'''create table if not exists repos (
+        owner text,
+        name text,
+        title text,
+        minDate text,
+        maxDate text);'''
+    cursor = con.cursor()
+    cursor.execute(create_table)
+    cursor.close()
+
 
 
 def str2dt(timestamp):
@@ -161,28 +174,13 @@ def get_metrics(repo, metric):
         return json.loads(r.content)[metric]
 
 def main():
-    '''
-    for repo in REPOS.keys():
-        for metric in METRICS.keys():
-            print('#############################################')
-            print(get_table_name(repo, metric))
-            print('#############################################')
-    #ts = '2022-08-11T00:00:00Z'
-    '''
-
-    
     con = sqlite3.connect(DB_PATH, isolation_level=None)
 
     for repo in REPOS:
         for metric in METRICS.keys():
-            table = get_table_name(repo, metric)
+            table_name = get_table_name(repo, metric)
             create_metric_table(con, repo, metric)
-            '''
-            insert_metric(con, table, {'timestamp': '2022-08-19T00:00:00Z', 'count': 105, 'uniques': 19})
-            insert_metric(con, table, {'timestamp': '2022-08-20T00:00:00Z', 'count': 105, 'uniques': 19})
-            insert_metric(con, table, {'timestamp': '2022-08-21T00:00:00Z', 'count': 105, 'uniques': 19})
-            insert_metric(con, table, {'timestamp': '2022-08-22T00:00:00Z', 'count': 105, 'uniques': 19})
-            '''
+            create_repo_table(con)
 
             lst = get_metrics(repo, metric)
             if not lst: continue
@@ -191,26 +189,14 @@ def main():
             # updated and we don't want to store it prematurely.
             lst = lst[:-1] 
 
-            latest = get_latest(con, table)
+            latest = get_latest(con, table_name)
             pruned_list = prune_list(lst, latest)
-            insert_metrics(con, table, pruned_list)
+            insert_metrics(con, table_name, pruned_list)
 
-            
-            '''
-            print('****************************** list ****************************')
-            print(lst)
-            print('****************************************************************')
-            '''
-
-            '''
-            print('****************************** latest ****************************')
-            print(latest)
-            print('****************************************************************')
-
-            print('****************************** new list ****************************')
-            print(pruned_list)
-            print('****************************************************************')
-            '''
+            # After inserting the metrics data, we want to insert/update the repos
+            # table with minDate and maxDate. If the row corresponding to this owner/name
+            # exists, then minDate should already exist so just update maxDate. If not,
+            # then insert new row with minDate and maxDate.
 
     con.close() 
         
