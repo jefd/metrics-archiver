@@ -17,7 +17,7 @@ REPOS = [
 METRICS = {'views': '/traffic/views',
            'clones': '/traffic/clones',
            'frequency': '/stats/code_frequency',
-           'commits': '/commits?per_page=1',
+           'commits': '/commits?per_page=100&page=1',
 }
 
 def get_latest(con, table_name):
@@ -176,23 +176,69 @@ def get_metrics(repo, metric):
         return json.loads(r.content)[metric]
 
 
-def getMinDate(repo, metric):
+def get_min_date_freq(repo, metric):
     url = get_url(repo, metric)
     headers = get_headers(repo)
     print(f'getting minDate from {url}')
     r = requests.get(url, headers=headers)
     if r.status_code == 200:
         lst = json.loads(r.content)
-        if metric == 'commits':
-            return lst[0]['commit']['author']['date']
-        elif metric == 'frequency':
-            return to_date(lst[0][0])
+        return to_date(lst[0][0])
 
 
-def update_repo_table(con, repo, metric, minDate):
-    if row_exists(con, repo, metric):
-        return
-    
+def get_min_date_commits(repo, metric):
+    def split_strip(s, ch):
+        return [a.strip() for a in s.split(ch)]
+
+    def get_links(headers):
+        rel_list = ['first', 'last', 'next', 'prev']
+
+        m = {}
+
+        link = headers.get('Link')
+        if not link: return m
+
+        for rel in rel_list:
+            l = split_strip(link, ',')
+            l2 = [ split_strip(item, ';') for item in l]
+
+            for url, relative in l2:
+                if rel in relative:
+                    m[rel] = url[1:-1]
+
+        return m
+
+    url = get_url(repo, metric)
+    headers = get_headers(repo)
+
+    commit_list = []
+    while url:
+        print(f'getting commits from {url}')
+        r = requests.get(url, headers=headers)
+        lst = json.loads(r.content)
+        #print(lst); sys.exit()
+
+        for l in lst:
+            date = l['commit']['author']['date']
+            #print(date)
+            commit_list.append(date)
+
+        links = get_links(r.headers)
+
+        url = links.get('next')
+
+    return sorted(commit_list)[0]
+
+
+
+def update_repo_table(con, repo, metric, lst=None):
+    funs = {'commits': get_min_date_commits, 'frequency': get_min_date_freq}
+
+    if lst:
+        minDate = lst[0]['timestamp']
+    else:
+        minDate = funs[metric](repo, metric)
+
     cursor = con.cursor()
     owner = repo['owner']
     name = repo['name']
@@ -220,6 +266,8 @@ def main():
 
     for repo in REPOS:
         for metric in METRICS.keys():
+            row_ex = row_exists(con, repo, metric)
+
             if metric == 'views' or metric == 'clones':
                 table_name = get_table_name(repo, metric)
                 create_metric_table(con, repo, metric)
@@ -239,13 +287,13 @@ def main():
                 # Get the minDate to insert into the repos
                 # table if it doesn't already exist. 
 
-                minDate = pruned_list[0]['timestamp']
+                # if the relevant row does not exist in the repos table
+                # then update the table with the row.
+                if not row_ex:
+                    update_repo_table(con, repo, metric, pruned_list)
 
-            else:
-                # get minDate for other metrics
-                minDate = getMinDate(repo, metric)
-
-            update_repo_table(con, repo, metric, minDate)
+            elif (metric == 'frequency' or metric == 'commits') and not row_ex:
+                update_repo_table(con, repo, metric)
 
     con.close() 
 
