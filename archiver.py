@@ -3,7 +3,7 @@ import json
 from datetime import datetime
 from tk import *
 import sqlite3
-import os
+import os, sys
 
 
 DB_PATH = os.path.join(os.path.dirname(__file__), 'metrics.db')
@@ -38,25 +38,25 @@ def prune_list(lst, latest):
     return [obj for obj in lst if obj['timestamp'] > latest]
 
 
-def insert(con, table_name, count, uniques, timestamp):
+def insert(con, table_name, timestamp, count, uniques):
     cursor = con.cursor()
     insert_query = f"""insert into "{table_name}" values (?, ?, ?);"""
 
-    cursor.execute(insert_query, (count, uniques, timestamp))
+    cursor.execute(insert_query, (timestamp, count, uniques))
     cursor.close()
 
 
 def insert_metric(con, table_name, dct):
     # {'timestamp': '2022-08-19T00:00:00Z', 'count': 105, 'uniques': 19}
+    timestamp = dct['timestamp']
     count = dct['count']
     uniques = dct['uniques']
-    timestamp = dct['timestamp']
 
     insert_query = f"""insert into "{table_name}"
         values (?, ?, ?);"""
 
     cursor = con.cursor()
-    cursor.execute(insert_query, (count, uniques, timestamp))
+    cursor.execute(insert_query, (timestamp, count, uniques))
     cursor.close()
 
     
@@ -69,10 +69,10 @@ def insert_metrics(con, table_name, lst):
     cursor.execute('begin')
     try:
         for dct in lst:
+            timestamp = dct['timestamp']
             count = dct['count']
             uniques = dct['uniques']
-            timestamp = dct['timestamp']
-            cursor.execute(insert_query, (count, uniques, timestamp))
+            cursor.execute(insert_query, (timestamp, count, uniques))
         cursor.execute('commit')
     except:
         cursor.execute('rollback')
@@ -91,9 +91,9 @@ def create_metric_table(con, repo, metric):
     print(f'creating table {table_name}')
 
     create_table = f'''create table if not exists "{table_name}" (
-        count integer,
-        uniques integer,
-        timestamp text);'''
+        timestamp text not null,
+        count integer not null,
+        uniques integer not null);'''
 
     #con = sqlite3.connect(DB)
     cursor = con.cursor()
@@ -104,10 +104,10 @@ def create_metric_table(con, repo, metric):
 
 def create_repo_table(con):
     create_table = f'''create table if not exists repos (
-        owner text,
-        name text,
-        metric text,
-        minDate text);'''
+        owner text not null,
+        name text not null,
+        metric text not null,
+        minDate text not null);'''
     cursor = con.cursor()
     cursor.execute(create_table)
     cursor.close()
@@ -239,6 +239,9 @@ def update_repo_table(con, repo, metric, lst=None):
     else:
         minDate = funs[metric](repo, metric)
 
+    if not minDate:
+        return
+
     cursor = con.cursor()
     owner = repo['owner']
     name = repo['name']
@@ -273,6 +276,7 @@ def main():
                 create_metric_table(con, repo, metric)
 
                 lst = get_metrics(repo, metric)
+                print(lst);sys.exit()
                 if not lst: continue
            
                 # remove last element because that is being continually
