@@ -216,7 +216,6 @@ def get_min_date_commits(repo, metric):
         print(f'getting commits from {url}')
         r = requests.get(url, headers=headers)
         lst = json.loads(r.content)
-        #print(lst); sys.exit()
 
         for l in lst:
             date = l['commit']['author']['date']
@@ -276,7 +275,6 @@ def main():
                 create_metric_table(con, repo, metric)
 
                 lst = get_metrics(repo, metric)
-                print(lst);sys.exit()
                 if not lst: continue
            
                 # remove last element because that is being continually
