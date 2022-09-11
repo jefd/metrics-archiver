@@ -1,4 +1,4 @@
-import requests, sys
+import requests, sys, time
 import json
 from datetime import datetime
 from tk import *
@@ -61,6 +61,8 @@ def insert_metric(con, table_name, dct):
 
     
 def insert_metrics(con, table_name, lst):
+    if not lst:
+        return
     print(f'inserting metrics into {table_name}')
     insert_query = f"""insert into "{table_name}"
         values (?, ?, ?);"""
@@ -88,7 +90,7 @@ def create_metric_table(con, repo, metric):
     repo_name = repo['name']
     #table_name = f'{owner}/{repo_name}/{metric}'
     table_name = get_table_name(repo, metric)
-    print(f'creating table {table_name}')
+    #print(f'creating table {table_name}')
 
     create_table = f'''create table if not exists "{table_name}" (
         timestamp text not null,
@@ -179,11 +181,22 @@ def get_metrics(repo, metric):
 def get_min_date_freq(repo, metric):
     url = get_url(repo, metric)
     headers = get_headers(repo)
-    print(f'getting minDate from {url}')
-    r = requests.get(url, headers=headers)
-    if r.status_code == 200:
-        lst = json.loads(r.content)
-        return to_date(lst[0][0])
+
+    # This endpoint is flaky for some reason and
+    # often returns an error status code so we'll
+    # give it a few tries.
+    tries = 0
+    while tries < 10:
+        tries += 1
+        print(f'getting minDate from {url}')
+        r = requests.get(url, headers=headers)
+        if r.status_code == 200:
+            print(f'received minDate! Tries = {tries}')
+            lst = json.loads(r.content)
+            return to_date(lst[0][0])
+        print(f'status code = {r.status_code}')
+        print('Going to sleep for a bit...')
+        time.sleep(5) # No real hurry. Be nice to the server.
 
 
 def get_min_date_commits(repo, metric):
@@ -213,7 +226,7 @@ def get_min_date_commits(repo, metric):
 
     commit_list = []
     while url:
-        print(f'getting commits from {url}')
+        #print(f'getting commits from {url}')
         r = requests.get(url, headers=headers)
         lst = json.loads(r.content)
 
