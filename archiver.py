@@ -18,6 +18,7 @@ METRICS = {'views': '/traffic/views',
            'clones': '/traffic/clones',
            'frequency': '/stats/code_frequency',
            'commits': '/commits?per_page=100&page=1',
+           'forks': '/forks?per_page=100&page=1',
 }
 
 def get_latest(con, table_name):
@@ -85,13 +86,7 @@ def insert_metrics(con, table_name, lst):
 
     
 
-def create_metric_table(con, repo, metric):
-    owner = repo['owner']
-    repo_name = repo['name']
-    #table_name = f'{owner}/{repo_name}/{metric}'
-    table_name = get_table_name(repo, metric)
-    #print(f'creating table {table_name}')
-
+def create_metric_table(con, table_name):
     create_table = f'''create table if not exists "{table_name}" (
         timestamp text not null,
         count integer not null,
@@ -103,6 +98,27 @@ def create_metric_table(con, repo, metric):
     cursor.close()
     #con.commit()
 
+def create_fork_table(con, table_name):
+    create_table = f'''create table if not exists "{table_name}" (
+        fork_count integer not null);'''
+
+    cursor = con.cursor()
+    cursor.execute(create_table)
+    cursor.close()
+
+def insert_or_update_forks(con, table_name, fork_count):
+    insert_sql = f'''insert or ignore into "{table_name}" (fork_count) values (?);''' 
+    update_sql = f'''update "{table_name}" set fork_count = ?;''' 
+    sql = insert_sql
+
+    cursor = con.cursor()
+    cursor.execute(f'select count(*) from "{table_name}";')
+    exists = cursor.fetchone()[0]
+    if exists:
+        sql = update_sql
+
+    cursor.execute(sql, (fork_count,))
+    cursor.close()
 
 def create_repo_table(con):
     create_table = f'''create table if not exists repos (
@@ -177,6 +193,50 @@ def get_metrics(repo, metric):
     if r.status_code == 200:
         return json.loads(r.content)[metric]
 
+def split_strip(s, ch):
+    return [a.strip() for a in s.split(ch)]
+
+def get_links(headers):
+    rel_list = ['first', 'last', 'next', 'prev']
+
+    m = {}
+
+    link = headers.get('Link')
+    if not link: return m
+
+    for rel in rel_list:
+        l = split_strip(link, ',')
+        l2 = [ split_strip(item, ';') for item in l]
+
+        for url, relative in l2:
+            if rel in relative:
+                m[rel] = url[1:-1]
+
+    return m
+
+def get_fork_count(repo):
+    url = get_url(repo, 'forks')
+    headers = get_headers(repo)
+
+    total = 0
+    while url:
+        r = requests.get(url, headers=headers)
+        lst = json.loads(r.content)
+
+        for l in lst:
+            count = l['forks_count']
+            if count == 0:
+                total += 1
+            else:
+                total += (count + 1)
+
+
+        links = get_links(r.headers)
+
+        url = links.get('next')
+
+    return total
+
 
 def get_min_date_freq(repo, metric):
     url = get_url(repo, metric)
@@ -200,26 +260,6 @@ def get_min_date_freq(repo, metric):
 
 
 def get_min_date_commits(repo, metric):
-    def split_strip(s, ch):
-        return [a.strip() for a in s.split(ch)]
-
-    def get_links(headers):
-        rel_list = ['first', 'last', 'next', 'prev']
-
-        m = {}
-
-        link = headers.get('Link')
-        if not link: return m
-
-        for rel in rel_list:
-            l = split_strip(link, ',')
-            l2 = [ split_strip(item, ';') for item in l]
-
-            for url, relative in l2:
-                if rel in relative:
-                    m[rel] = url[1:-1]
-
-        return m
 
     url = get_url(repo, metric)
     headers = get_headers(repo)
@@ -285,7 +325,7 @@ def main():
 
             if metric == 'views' or metric == 'clones':
                 table_name = get_table_name(repo, metric)
-                create_metric_table(con, repo, metric)
+                create_metric_table(con, table_name)
 
                 lst = get_metrics(repo, metric)
                 if not lst: continue
@@ -309,6 +349,12 @@ def main():
 
             elif (metric == 'frequency' or metric == 'commits') and not row_ex:
                 update_repo_table(con, repo, metric)
+
+            elif (metric == 'forks'):
+                table_name = get_table_name(repo, metric)
+                create_fork_table(con, table_name)
+                fork_count = get_fork_count(repo)
+                insert_or_update_forks(con, table_name, fork_count)
 
     con.close() 
 
