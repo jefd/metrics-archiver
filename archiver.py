@@ -39,7 +39,56 @@ def prune_list(lst, latest):
     return [obj for obj in lst if obj['timestamp'] > latest]
 
 
-    
+def create_repo_table(con):
+    create_table = f'''create table if not exists repos (
+        owner text not null,
+        name text not null,
+        metric text not null,
+        minDate text not null);'''
+    cursor = con.cursor()
+    cursor.execute(create_table)
+    cursor.close()
+
+
+def create_metric_table(con, table_name):
+    create_table = f'''create table if not exists "{table_name}" (
+        timestamp text not null,
+        count integer not null,
+        uniques integer not null);'''
+
+    cursor = con.cursor()
+    cursor.execute(create_table)
+    cursor.close()
+
+
+def create_freq_table(con, table_name):
+    create_table = f'''create table if not exists "{table_name}" (
+        timestamp text not null,
+        additions integer not null,
+        deletions integer not null);'''
+
+    cursor = con.cursor()
+    cursor.execute(create_table)
+    cursor.close()
+
+def create_commit_table(con, table_name):
+    create_table = f'''create table if not exists "{table_name}" (
+        timestamp text not null,
+        commits integer not null);'''
+
+    cursor = con.cursor()
+    cursor.execute(create_table)
+    cursor.close()
+
+def create_fork_table(con, table_name):
+    create_table = f'''create table if not exists "{table_name}" (
+        fork_count integer not null);'''
+
+    cursor = con.cursor()
+    cursor.execute(create_table)
+    cursor.close()
+
+
 def insert_metrics(con, table_name, lst):
     if not lst:
         return
@@ -61,39 +110,49 @@ def insert_metrics(con, table_name, lst):
     finally:
         cursor.close()
 
-    #cursor.close()
 
-    
-
-def create_repo_table(con):
-    create_table = f'''create table if not exists repos (
-        owner text not null,
-        name text not null,
-        metric text not null,
-        minDate text not null);'''
-    cursor = con.cursor()
-    cursor.execute(create_table)
-    cursor.close()
-
-def create_metric_table(con, table_name):
-    create_table = f'''create table if not exists "{table_name}" (
-        timestamp text not null,
-        count integer not null,
-        uniques integer not null);'''
-
-    #con = sqlite3.connect(DB)
-    cursor = con.cursor()
-    cursor.execute(create_table)
-    cursor.close()
-    #con.commit()
-
-def create_fork_table(con, table_name):
-    create_table = f'''create table if not exists "{table_name}" (
-        fork_count integer not null);'''
+def insert_commits(con, table_name, lst):
+    if not lst:
+        return
+    print(f'inserting metrics into {table_name}')
+    insert_query = f"""insert into "{table_name}"
+        values (?, ?);"""
 
     cursor = con.cursor()
-    cursor.execute(create_table)
-    cursor.close()
+    cursor.execute('begin')
+    try:
+        for dct in lst:
+            timestamp = dct['timestamp']
+            commits = dct['commits']
+            cursor.execute(insert_query, (timestamp, commits))
+        cursor.execute('commit')
+    except:
+        cursor.execute('rollback')
+    finally:
+        cursor.close()
+
+def insert_code_freq(con, table_name, lst):
+    if not lst:
+        return
+
+    print(f'inserting metrics into {table_name}')
+    insert_query = f"""insert into "{table_name}"
+        values (?, ?, ?);"""
+
+    cursor = con.cursor()
+    cursor.execute('begin')
+    try:
+        for dct in lst:
+            timestamp = dct['timestamp']
+            additions = dct['additions']
+            deletions = dct['deletions']
+            cursor.execute(insert_query, (timestamp, additions, deletions))
+        cursor.execute('commit')
+    except:
+        cursor.execute('rollback')
+    finally:
+        cursor.close()
+
 
 def insert_or_update_forks(con, table_name, fork_count):
     insert_sql = f'''insert or ignore into "{table_name}" (fork_count) values (?);''' 
@@ -111,7 +170,7 @@ def insert_or_update_forks(con, table_name, fork_count):
 
 
 
-
+'''
 def str2dt(timestamp):
     #return datetime.utcfromtimestamp(timestamp).strftime('%Y-%m-%d')
     
@@ -124,6 +183,7 @@ def dt2str(dt):
     #fmt = '%Y-%m-%dT%H:%M:%SZ'
     fmt = '%Y-%m-%d %H:%M:%S'
     return dt.strftime(fmt)
+'''
 
 
 def get_url(repo, metric):
@@ -218,58 +278,60 @@ def get_fork_count(repo):
     return total
 
 
-def get_min_date_freq(repo, metric):
+def get_commits(repo, metric):
+    url = get_url(repo, metric)
+    headers = get_headers(repo)
+
+    commit_dct = {}
+
+    while url:
+        #print(url)
+        r = requests.get(url, headers=headers)
+        lst = json.loads(r.content)
+        #print(lst); sys.exit()
+
+        for l in lst:
+            date = l['commit']['author']['date'][0:10] + 'T00:00:00Z'
+            if date in commit_dct:
+                commit_dct[date] += 1
+            else:
+                commit_dct[date] = 1
+
+        links = get_links(r.headers)
+
+        url = links.get('next')
+
+    # sort dct by key
+    sorted_dct = {key:commit_dct[key] for key in sorted(commit_dct.keys())}
+    return [{'timestamp': k, 'commits': v} for k,v in sorted_dct.items()]
+    #return commit_dct
+    #return sorted_dct
+
+def get_code_freq(repo, metric):
     url = get_url(repo, metric)
     headers = get_headers(repo)
 
     # This endpoint is flaky for some reason and
     # often returns an error status code so we'll
     # give it a few tries.
+
     tries = 0
     while tries < 10:
+        print('getting code frequency')
         tries += 1
-        print(f'getting minDate from {url}')
         r = requests.get(url, headers=headers)
         if r.status_code == 200:
-            print(f'received minDate! Tries = {tries}')
+            print(f'received code frequency! Tries = {tries}')
             lst = json.loads(r.content)
-            return to_date(lst[0][0])
+            return [{'timestamp': to_date(l[0]), 'additions': l[1], 'deletions': l[2]} for l in lst]
         print(f'status code = {r.status_code}')
         print('Going to sleep for a bit...')
         time.sleep(5) # No real hurry. Be nice to the server.
 
 
-def get_min_date_commits(repo, metric):
+def update_repo_table(con, repo, metric, lst):
 
-    url = get_url(repo, metric)
-    headers = get_headers(repo)
-
-    commit_list = []
-    while url:
-        #print(f'getting commits from {url}')
-        r = requests.get(url, headers=headers)
-        lst = json.loads(r.content)
-
-        for l in lst:
-            date = l['commit']['author']['date']
-            #print(date)
-            commit_list.append(date)
-
-        links = get_links(r.headers)
-
-        url = links.get('next')
-
-    return sorted(commit_list)[0]
-
-
-
-def update_repo_table(con, repo, metric, lst=None):
-    funs = {'commits': get_min_date_commits, 'frequency': get_min_date_freq}
-
-    if lst:
-        minDate = lst[0]['timestamp']
-    else:
-        minDate = funs[metric](repo, metric)
+    minDate = lst[0]['timestamp']
 
     if not minDate:
         return
@@ -327,10 +389,42 @@ def main():
                 if not row_ex:
                     update_repo_table(con, repo, metric, pruned_list)
 
-            elif (metric == 'frequency' or metric == 'commits') and not row_ex:
-                update_repo_table(con, repo, metric)
+            elif metric == 'commits':
+                table_name = get_table_name(repo, metric)
+                create_commit_table(con, table_name)
 
-            elif (metric == 'forks'):
+                lst = get_commits(repo, metric)
+                if not lst: continue
+
+                lst = lst[:-1] 
+
+                latest = get_latest(con, table_name)
+                pruned_list = prune_list(lst, latest)
+                if not pruned_list: continue
+                insert_commits(con, table_name, pruned_list)
+
+                if not row_ex:
+                    update_repo_table(con, repo, metric, pruned_list)
+
+
+            elif metric == 'frequency':
+                table_name = get_table_name(repo, metric)
+                create_freq_table(con, table_name)
+                lst = get_code_freq(repo, metric)
+                if not lst: continue
+
+                lst = lst[:-1] 
+
+                latest = get_latest(con, table_name)
+                pruned_list = prune_list(lst, latest)
+                if not pruned_list: continue
+                insert_code_freq(con, table_name, pruned_list)
+
+                if not row_ex:
+                    update_repo_table(con, repo, metric, pruned_list)
+
+
+            elif metric == 'forks':
                 table_name = get_table_name(repo, metric)
                 create_fork_table(con, table_name)
                 fork_count = get_fork_count(repo)
