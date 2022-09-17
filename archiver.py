@@ -39,27 +39,6 @@ def prune_list(lst, latest):
     return [obj for obj in lst if obj['timestamp'] > latest]
 
 
-def insert(con, table_name, timestamp, count, uniques):
-    cursor = con.cursor()
-    insert_query = f"""insert into "{table_name}" values (?, ?, ?);"""
-
-    cursor.execute(insert_query, (timestamp, count, uniques))
-    cursor.close()
-
-
-def insert_metric(con, table_name, dct):
-    # {'timestamp': '2022-08-19T00:00:00Z', 'count': 105, 'uniques': 19}
-    timestamp = dct['timestamp']
-    count = dct['count']
-    uniques = dct['uniques']
-
-    insert_query = f"""insert into "{table_name}"
-        values (?, ?, ?);"""
-
-    cursor = con.cursor()
-    cursor.execute(insert_query, (timestamp, count, uniques))
-    cursor.close()
-
     
 def insert_metrics(con, table_name, lst):
     if not lst:
@@ -85,6 +64,16 @@ def insert_metrics(con, table_name, lst):
     #cursor.close()
 
     
+
+def create_repo_table(con):
+    create_table = f'''create table if not exists repos (
+        owner text not null,
+        name text not null,
+        metric text not null,
+        minDate text not null);'''
+    cursor = con.cursor()
+    cursor.execute(create_table)
+    cursor.close()
 
 def create_metric_table(con, table_name):
     create_table = f'''create table if not exists "{table_name}" (
@@ -120,15 +109,6 @@ def insert_or_update_forks(con, table_name, fork_count):
     cursor.execute(sql, (fork_count,))
     cursor.close()
 
-def create_repo_table(con):
-    create_table = f'''create table if not exists repos (
-        owner text not null,
-        name text not null,
-        metric text not null,
-        minDate text not null);'''
-    cursor = con.cursor()
-    cursor.execute(create_table)
-    cursor.close()
 
 
 
