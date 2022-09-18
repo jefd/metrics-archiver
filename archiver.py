@@ -21,6 +21,25 @@ METRICS = {'views': '/traffic/views',
            'forks': '/forks?per_page=100&page=1',
 }
 
+
+def multi_try(url, headers, n=10):
+    tries = 0
+    sleep = 5
+    while tries < n:
+        print(f'request: {url}')
+        tries += 1
+        r = requests.get(url, headers=headers)
+        if r.status_code == 200:
+            print(f'received response! Tries = {tries}')
+            return r 
+
+        print(f'status code = {r.status_code}')
+        print(f'Going to sleep for {sleep} seconds...')
+        time.sleep(sleep) # No real hurry. Be nice to the server.
+
+    return r
+
+
 def get_latest(con, table_name):
     try:
         cursor = con.cursor()
@@ -211,14 +230,16 @@ def get_headers(repo):
 def get_views(repo):
     url = get_url(repo, 'views')
     headers = get_headers(repo)
-    r = requests.get(url, headers=headers)
+    #r = requests.get(url, headers=headers)
+    r = multi_try(url, headers)
     if r.status_code == 200:
         return json.loads(r.content)
 
 def get_clones(repo):
     url = get_url(repo, 'clones')
     headers = get_headers(repo)
-    r = requests.get(url, headers=headers)
+    # r = requests.get(url, headers=headers)
+    r = multi_try(url, headers)
     if r.status_code == 200:
         return json.loads(r.content)
 
@@ -229,7 +250,8 @@ def get_metrics(repo, metric):
     url = get_url(repo, metric)
     headers = get_headers(repo)
     print(f'getting metrics from {url}')
-    r = requests.get(url, headers=headers)
+    #r = requests.get(url, headers=headers)
+    r = multi_try(url, headers)
     if r.status_code == 200:
         return json.loads(r.content)[metric]
 
@@ -260,20 +282,22 @@ def get_fork_count(repo):
 
     total = 0
     while url:
-        r = requests.get(url, headers=headers)
-        lst = json.loads(r.content)
+        #r = requests.get(url, headers=headers)
+        r = multi_try(url, headers)
+        if r.status_code == 200:
+            lst = json.loads(r.content)
 
-        for l in lst:
-            count = l['forks_count']
-            if count == 0:
-                total += 1
-            else:
-                total += (count + 1)
+            for l in lst:
+                count = l['forks_count']
+                if count == 0:
+                    total += 1
+                else:
+                    total += (count + 1)
 
 
-        links = get_links(r.headers)
+            links = get_links(r.headers)
 
-        url = links.get('next')
+            url = links.get('next')
 
     return total
 
@@ -286,20 +310,22 @@ def get_commits(repo, metric):
 
     while url:
         #print(url)
-        r = requests.get(url, headers=headers)
-        lst = json.loads(r.content)
-        #print(lst); sys.exit()
+        #r = requests.get(url, headers=headers)
+        r = multi_try(url, headers)
+        if r.status_code == 200:
+            lst = json.loads(r.content)
+            #print(lst); sys.exit()
 
-        for l in lst:
-            date = l['commit']['author']['date'][0:10] + 'T00:00:00Z'
-            if date in commit_dct:
-                commit_dct[date] += 1
-            else:
-                commit_dct[date] = 1
+            for l in lst:
+                date = l['commit']['author']['date'][0:10] + 'T00:00:00Z'
+                if date in commit_dct:
+                    commit_dct[date] += 1
+                else:
+                    commit_dct[date] = 1
 
-        links = get_links(r.headers)
+            links = get_links(r.headers)
 
-        url = links.get('next')
+            url = links.get('next')
 
     # sort dct by key
     sorted_dct = {key:commit_dct[key] for key in sorted(commit_dct.keys())}
@@ -311,22 +337,10 @@ def get_code_freq(repo, metric):
     url = get_url(repo, metric)
     headers = get_headers(repo)
 
-    # This endpoint is flaky for some reason and
-    # often returns an error status code so we'll
-    # give it a few tries.
-
-    tries = 0
-    while tries < 10:
-        print('getting code frequency')
-        tries += 1
-        r = requests.get(url, headers=headers)
-        if r.status_code == 200:
-            print(f'received code frequency! Tries = {tries}')
-            lst = json.loads(r.content)
-            return [{'timestamp': to_date(l[0]), 'additions': l[1], 'deletions': l[2]} for l in lst]
-        print(f'status code = {r.status_code}')
-        print('Going to sleep for a bit...')
-        time.sleep(5) # No real hurry. Be nice to the server.
+    r = multi_try(url, headers)
+    if r.status_code == 200:
+        lst = json.loads(r.content)
+        return [{'timestamp': to_date(l[0]), 'additions': l[1], 'deletions': l[2]} for l in lst]
 
 
 def update_repo_table(con, repo, metric, lst):
