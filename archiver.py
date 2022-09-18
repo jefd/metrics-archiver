@@ -22,7 +22,8 @@ METRICS = {'views': '/traffic/views',
 }
 
 
-def multi_try(url, headers, n=10):
+# multiple attempt get
+def mget(url, headers, n=10):
     tries = 0
     sleep = 5
     while tries < n:
@@ -231,7 +232,7 @@ def get_views(repo):
     url = get_url(repo, 'views')
     headers = get_headers(repo)
     #r = requests.get(url, headers=headers)
-    r = multi_try(url, headers)
+    r = mget(url, headers)
     if r.status_code == 200:
         return json.loads(r.content)
 
@@ -239,7 +240,7 @@ def get_clones(repo):
     url = get_url(repo, 'clones')
     headers = get_headers(repo)
     # r = requests.get(url, headers=headers)
-    r = multi_try(url, headers)
+    r = mget(url, headers)
     if r.status_code == 200:
         return json.loads(r.content)
 
@@ -251,7 +252,7 @@ def get_metrics(repo, metric):
     headers = get_headers(repo)
     print(f'getting metrics from {url}')
     #r = requests.get(url, headers=headers)
-    r = multi_try(url, headers)
+    r = mget(url, headers)
     if r.status_code == 200:
         return json.loads(r.content)[metric]
 
@@ -283,7 +284,7 @@ def get_fork_count(repo):
     total = 0
     while url:
         #r = requests.get(url, headers=headers)
-        r = multi_try(url, headers)
+        r = mget(url, headers)
         if r.status_code == 200:
             lst = json.loads(r.content)
 
@@ -311,7 +312,7 @@ def get_commits(repo, metric):
     while url:
         #print(url)
         #r = requests.get(url, headers=headers)
-        r = multi_try(url, headers)
+        r = mget(url, headers)
         if r.status_code == 200:
             lst = json.loads(r.content)
             #print(lst); sys.exit()
@@ -337,7 +338,7 @@ def get_code_freq(repo, metric):
     url = get_url(repo, metric)
     headers = get_headers(repo)
 
-    r = multi_try(url, headers)
+    r = mget(url, headers)
     if r.status_code == 200:
         lst = json.loads(r.content)
         return [{'timestamp': to_date(l[0]), 'additions': l[1], 'deletions': l[2]} for l in lst]
