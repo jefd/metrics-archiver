@@ -151,7 +151,7 @@ def insert_commits(con, table_name, lst):
     finally:
         cursor.close()
 
-def insert_code_freq(con, table_name, lst):
+def insert_frequency(con, table_name, lst):
     if not lst:
         return
 
@@ -334,7 +334,7 @@ def get_commits(repo, metric):
     #return commit_dct
     #return sorted_dct
 
-def get_code_freq(repo, metric):
+def get_frequency(repo, metric):
     url = get_url(repo, metric)
     headers = get_headers(repo)
 
@@ -344,17 +344,17 @@ def get_code_freq(repo, metric):
         return [{'timestamp': to_date(l[0]), 'additions': l[1], 'deletions': l[2]} for l in lst]
 
 
-def update_repo_table(con, repo, metric, lst):
-
-    minDate = lst[0]['timestamp']
-
-    if not minDate:
-        return
-
+def update_repo_table(con, repo, metric):
     cursor = con.cursor()
+
     owner = repo['owner']
     name = repo['name']
     metric = metric
+    table_name = get_table_name(repo, metric)
+
+    select_query = f"""select timestamp from "{table_name}" order by timestamp limit 1;"""
+    cursor.execute(select_query)
+    minDate = cursor.fetchone()[0]
 
     insert_query = f"""insert into repos values (?, ?, ?, ?);"""
     cursor.execute(insert_query, (owner, name, metric, minDate))
@@ -402,7 +402,7 @@ def main():
                 # if the relevant row does not exist in the repos table
                 # then update the table with the row.
                 if not row_ex:
-                    update_repo_table(con, repo, metric, pruned_list)
+                    update_repo_table(con, repo, metric)
 
             elif metric == 'commits':
                 table_name = get_table_name(repo, metric)
@@ -419,13 +419,13 @@ def main():
                 insert_commits(con, table_name, pruned_list)
 
                 if not row_ex:
-                    update_repo_table(con, repo, metric, pruned_list)
+                    update_repo_table(con, repo, metric)
 
 
             elif metric == 'frequency':
                 table_name = get_table_name(repo, metric)
                 create_freq_table(con, table_name)
-                lst = get_code_freq(repo, metric)
+                lst = get_frequency(repo, metric)
                 if not lst: continue
 
                 lst = lst[:-1] 
@@ -433,10 +433,10 @@ def main():
                 latest = get_latest(con, table_name)
                 pruned_list = prune_list(lst, latest)
                 if not pruned_list: continue
-                insert_code_freq(con, table_name, pruned_list)
+                insert_frequency(con, table_name, pruned_list)
 
                 if not row_ex:
-                    update_repo_table(con, repo, metric, pruned_list)
+                    update_repo_table(con, repo, metric)
 
 
             elif metric == 'forks':
