@@ -338,7 +338,7 @@ def get_code_freq(repo, metric):
     url = get_url(repo, metric)
     headers = get_headers(repo)
 
-    r = mget(url, headers)
+    r = mget(url, headers, n=20)
     if r.status_code == 200:
         lst = json.loads(r.content)
         return [{'timestamp': to_date(l[0]), 'additions': l[1], 'deletions': l[2]} for l in lst]
