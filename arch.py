@@ -446,6 +446,7 @@ def main():
                 insert_or_update_forks(con, table_name, fork_count)
 
     con.close() 
+    print('Finished!')
 
 
 if __name__ == '__main__':
